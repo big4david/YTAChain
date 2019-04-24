@@ -51,7 +51,7 @@ void hdddata::init(name owner) {
         //todo check the 1st time insert
         row.owner = owner;
         row.last_hdd_balance=10;
-        row.hdd_per_cycle_fee=10;
+        row.hdd_per_cycle_fee=5;
         row.hdd_per_cycle_profit=10;
         row.hdd_space=20;
         row.last_hdd_time = current_time();
@@ -108,10 +108,8 @@ void hdddata::gethbalance(name owner) {
             print("B   gethbalance   .last_hdd_balance :  ", row.last_hdd_balance,  "\n");
             row.last_hdd_time = tmp_t;
         });
-        
-        
     }
-
+    //update hddofficial balance
 }
 
 void hdddata::update_hddofficial(hbalance_table& _hbalance, const uint64_t _hb, const uint64_t time) {
@@ -129,7 +127,7 @@ void hdddata::gethsum() {
     hbalance_table            _hbalance(_self, _self.value);
     auto hbalance_itr = _hbalance.find(HDD_OFFICIAL.value);
     eosio_assert( hbalance_itr != _hbalance.end(), "no HDD_OFFICIAL exists  in  hbalance table" );
-    //todo check the 1st time insert
+
     uint64_t tmp_t = current_time();
     _hbalance.modify(hbalance_itr, _self, [&](auto &row) {
         print("gethbalance  modify  last_hdd_balance :  ", hbalance_itr->get_last_hdd_balance(),  "\n");
@@ -138,9 +136,8 @@ void hdddata::gethsum() {
         
         print("gethbalance  modify  slot_t :  ", slot_t,  "\n");
         //todo  check overflow and time cycle 
-        row.last_hdd_balance=
-        hbalance_itr->get_last_hdd_balance() + 
-        slot_t * ( hbalance_itr->get_hdd_per_cycle_profit() - hbalance_itr->get_hdd_per_cycle_fee() ) * seconds_in_one_day;
+        row.last_hdd_balance = hbalance_itr->get_last_hdd_balance() + 
+             slot_t * ( hbalance_itr->get_hdd_per_cycle_profit() - hbalance_itr->get_hdd_per_cycle_fee() ) * seconds_in_one_day;
         
         print("B   gethbalance   .last_hdd_balance :  ", row.last_hdd_balance,  "\n");
         row.last_hdd_time = tmp_t;
@@ -154,18 +151,31 @@ void hdddata::sethfee(name owner, uint64_t fee) {
     hbalance_table  _hbalance(owner, owner.value);
     auto hbalance_itr = _hbalance.find(owner.value);
     
-    eosio_assert( hbalance_itr != _hbalance.end(), "no owner exists  in _hbalance table" );
-    
+    eosio_assert( hbalance_itr != _hbalance.end(), "no owner exists  in _hbalance table  \n" );
+    eosio_assert(fee != hbalance_itr->get_hdd_per_cycle_fee(), " the fee is the same \n");
     //每周期费用 <= （占用存储空间*数据分片大小/1GB）*（记账周期/ 1年）
-    //eos_assert( xxx, "");
+    bool istrue = hbalance_itr->get_hdd_per_cycle_fee() <= 
+        (hbalance_itr->get_hdd_space()) * data_slice_size/one_gb *seconds_in_one_day/seconds_in_one_year;
+    eosio_assert(istrue , "the fee verification is not  right \n");
+    
+    uint64_t tmp_t = current_time();
     _hbalance.modify(hbalance_itr, owner, [&](auto &row) {
         print("A   row.hdd_per_cycle_fee :  ", row.hdd_per_cycle_fee,  " \n");
         //todo check overflow
-        row.hdd_per_cycle_fee -=fee;
+        row.hdd_per_cycle_fee = fee;
+        uint64_t slot_t = (tmp_t - hbalance_itr->last_hdd_time)/1000000ll;   //convert to seconds
+        
+        print("gethbalance  modify  slot_t :  ", slot_t,  "\n");
+        //todo  check overflow and time cycle 
+        row.last_hdd_balance = hbalance_itr->get_last_hdd_balance() + 
+             slot_t * ( hbalance_itr->get_hdd_per_cycle_profit() - fee ) * seconds_in_one_day;
+         
+        row.last_hdd_time = tmp_t;
+         
     });
     print("B   row.hdd_per_cycle_fee :  ", hbalance_itr->get_hdd_per_cycle_fee(),  " \n");
     
-    //每周期费用 <= （占用存储空间*数据分片大小/1GB）*（记账周期/ 1年）
+    //update the hddofficial 
 }
 
 //@abi action
@@ -180,8 +190,10 @@ void hdddata::subhbalance(name owner,  uint64_t balance){
     _hbalance.modify(hbalance_itr, owner, [&](auto &row) {
         //todo check overflow
         row.last_hdd_balance -=balance;
+        row.last_hdd_time = current_time();
     });
-
+    
+    //update the hddofficial 
 }
 
 //@abi action
@@ -198,6 +210,7 @@ void hdddata::addhspace(name owner, name hddaccount, uint64_t space){
         row.hdd_space +=space;
     });
 
+    //update hddofficial balance
 }
 
 //@abi action
@@ -220,7 +233,6 @@ void hdddata::subhspace(name owner, name hddaccount, uint64_t space){
 //@abi action
 void hdddata::newmaccount(name mname, name owner) {
     require_auth(mname);
-    //maccount_table _maccount(_self, _self.value);
     auto maccount_itr = _maccount.find(mname.value);
     eosio_assert( maccount_itr == _maccount.end(), "owner already exist in _maccount table \n" );
 
@@ -266,10 +278,10 @@ void hdddata::addmprofit(name mname, uint64_t space){
         //todo check the 1st time insert
         //row.owner = owner;
         row.hdd_space += data_slice_size;
+         //每周期收益 += (预采购空间*数据分片大小/1GB）*（记账周期/ 1年）
         row.hdd_per_cycle_profit += (preprocure_space*data_slice_size/one_gb);
     });
 
-    //每周期收益 += (预采购空间*数据分片大小/1GB）*（记账周期/ 1年）        
 }
 
 //@abi action
@@ -413,10 +425,8 @@ asset exchange_state::convert( asset from, const symbol& to ) {
 
 extern "C" {
     void apply(uint64_t receiver, uint64_t code, uint64_t action) {
-        if(code==receiver)
-        {
-            switch(action)
-            {
+        if(code==receiver) {
+            switch(action) {
                 EOSIO_DISPATCH_HELPER( hdddata, (init)(gethbalance)(gethsum)(sethfee)(newmaccount)(addmprofit)(subhbalance)(buyhdd)(sellhdd)(addhspace)(subhspace) )
             }
         }
