@@ -144,7 +144,9 @@ private:
     typedef multi_index<"producer"_n, producer> producer_table;
     
 private:
-    void update_hddofficial(hbalance_table& _hblance, const uint64_t _hb, const uint64_t time);
+    void update_hddofficial( hbalance_table& _hbalance, 
+        const int64_t _hb=0, const int64_t _fee=0, const int64_t _profit=0, 
+        const int64_t _space=0, const uint64_t _time=0 );
     
     
     //hbalance_table                                   _hbalance;

@@ -82,6 +82,8 @@ void hdddata::gethbalance(name owner) {
     require_auth(owner);    
     hbalance_table  _hbalance(_self, _self.value);
     auto hbalance_itr = _hbalance.find(owner.value);
+    uint64_t tmp_t = current_time();
+    int64_t delta_balance = 0;
     if(hbalance_itr == _hbalance.end()) {
         _hbalance.emplace(owner, [&](auto &row) {
             print("A   gethbalance :  ", owner,   " is new  ... \n");
@@ -90,35 +92,40 @@ void hdddata::gethbalance(name owner) {
             row.hdd_per_cycle_fee=5;
             row.hdd_per_cycle_profit=10;
             row.hdd_space=10;
-            row.last_hdd_time = current_time();
+            row.last_hdd_time = tmp_t;
         });
     } else {
-        uint64_t tmp_t = current_time();
+        
         _hbalance.modify(hbalance_itr, _self, [&](auto &row) {
             print("gethbalance  modify  last_hdd_balance :  ", hbalance_itr->get_last_hdd_balance(),  "\n");
             
             uint64_t slot_t = (tmp_t - hbalance_itr->last_hdd_time)/1000000ll;   //convert to seconds
-            
+            uint64_t tmp_last_balance = hbalance_itr->get_last_hdd_balance();
             print("gethbalance  modify  slot_t :  ", slot_t,  "\n");
             //todo  check overflow and time cycle 
-            row.last_hdd_balance=
-            hbalance_itr->get_last_hdd_balance() + 
+            row.last_hdd_balance = tmp_last_balance + 
             slot_t * ( hbalance_itr->get_hdd_per_cycle_profit() - hbalance_itr->get_hdd_per_cycle_fee() ) * seconds_in_one_day;
-            
-            print("B   gethbalance   .last_hdd_balance :  ", row.last_hdd_balance,  "\n");
             row.last_hdd_time = tmp_t;
+            
+            print("B   gethbalance   last_hdd_balance :  ", row.last_hdd_balance,  "\n");
+            delta_balance = row.last_hdd_balance - tmp_last_balance;
         });
     }
     //update hddofficial balance
+    update_hddofficial(_hbalance, delta_balance, 0, 0, 0, tmp_t);
 }
 
-void hdddata::update_hddofficial(hbalance_table& _hbalance, const uint64_t _hb, const uint64_t time) {
+void hdddata::update_hddofficial(hbalance_table& _hbalance, 
+    const int64_t _hb, const int64_t _fee, const int64_t _profit, const int64_t _space, const uint64_t _time) {
     auto hbalance_itr = _hbalance.find(HDD_OFFICIAL.value);
     eosio_assert( hbalance_itr != _hbalance.end(), "no HDD_OFFICIAL exists  in  hbalance table" );
     _hbalance.modify(hbalance_itr, _self, [&](auto &row) {
         //todo  check overflow and time cycle 
         row.last_hdd_balance  += _hb;
-        row.last_hdd_time = time;
+        row.hdd_per_cycle_fee += _fee;
+        row.hdd_per_cycle_profit += _profit;
+        row.hdd_space += _space;
+        row.last_hdd_time = _time;
     });
 }
 
@@ -158,24 +165,30 @@ void hdddata::sethfee(name owner, uint64_t fee) {
         (hbalance_itr->get_hdd_space()) * data_slice_size/one_gb *seconds_in_one_day/seconds_in_one_year;
     eosio_assert(istrue , "the fee verification is not  right \n");
     
+
+    int64_t delta_balance = 0;
+    int64_t delta_fee = 0;
     uint64_t tmp_t = current_time();
     _hbalance.modify(hbalance_itr, owner, [&](auto &row) {
         print("A   row.hdd_per_cycle_fee :  ", row.hdd_per_cycle_fee,  " \n");
         //todo check overflow
+        delta_fee = fee - row.hdd_per_cycle_fee;
         row.hdd_per_cycle_fee = fee;
         uint64_t slot_t = (tmp_t - hbalance_itr->last_hdd_time)/1000000ll;   //convert to seconds
-        
+        uint64_t tmp_balance = hbalance_itr->get_last_hdd_balance() ;
         print("gethbalance  modify  slot_t :  ", slot_t,  "\n");
         //todo  check overflow and time cycle 
-        row.last_hdd_balance = hbalance_itr->get_last_hdd_balance() + 
+        row.last_hdd_balance = tmp_balance + 
              slot_t * ( hbalance_itr->get_hdd_per_cycle_profit() - fee ) * seconds_in_one_day;
          
         row.last_hdd_time = tmp_t;
-         
+        
+        delta_balance = row.last_hdd_balance - tmp_balance;
     });
     print("B   row.hdd_per_cycle_fee :  ", hbalance_itr->get_hdd_per_cycle_fee(),  " \n");
     
-    //update the hddofficial 
+    //update the hddofficial todo
+    update_hddofficial(_hbalance, delta_balance, delta_fee, 0, 0, tmp_t);
 }
 
 //@abi action
@@ -186,14 +199,15 @@ void hdddata::subhbalance(name owner,  uint64_t balance){
     auto hbalance_itr = _hbalance.find(owner.value);
     
     eosio_assert( hbalance_itr != _hbalance.end(), "no owner exists  in _hbalance table" );
-
+    uint64_t tmp_t = current_time();
     _hbalance.modify(hbalance_itr, owner, [&](auto &row) {
         //todo check overflow
         row.last_hdd_balance -=balance;
-        row.last_hdd_time = current_time();
+        row.last_hdd_time = tmp_t;
     });
     
     //update the hddofficial 
+    update_hddofficial(_hbalance, -balance, 0, 0, 0, tmp_t);
 }
 
 //@abi action
@@ -210,7 +224,7 @@ void hdddata::addhspace(name owner, name hddaccount, uint64_t space){
         row.hdd_space +=space;
     });
 
-    //update hddofficial balance
+    //update hddofficial balance todo
 }
 
 //@abi action
@@ -228,6 +242,7 @@ void hdddata::subhspace(name owner, name hddaccount, uint64_t space){
         row.hdd_space -=space;
     });
 
+     //update hddofficial balance todo
 }
 
 //@abi action
@@ -251,7 +266,7 @@ void hdddata::newmaccount(name mname, name owner) {
         //todo check the 1st time insert to modify
         row.owner = owner;
         row.last_hdd_balance=10;
-        row.hdd_per_cycle_fee=10;
+        row.hdd_per_cycle_fee=5;
         row.hdd_per_cycle_profit=10;
         row.hdd_space=0;
         row.last_hdd_time=current_time();
@@ -281,7 +296,9 @@ void hdddata::addmprofit(name mname, uint64_t space){
          //每周期收益 += (预采购空间*数据分片大小/1GB）*（记账周期/ 1年）
         row.hdd_per_cycle_profit += (preprocure_space*data_slice_size/one_gb);
     });
-
+    
+    //update the hddofficial
+    update_hddofficial(_hbalance, 0, 0, (preprocure_space*data_slice_size/one_gb), data_slice_size, 0);
 }
 
 //@abi action
@@ -289,8 +306,8 @@ void hdddata::buyhdd(name buyer, name receiver, asset quant) {
     require_auth(buyer);
     eosio_assert( quant.amount > 0, "must purchase a positive amount" );
 
-    INLINE_ACTION_SENDER(eosio::token, transfer)( token_account, {buyer,active_permission},
-    { buyer, hdd_account, quant, std::string("buy hdd") } );
+    INLINE_ACTION_SENDER( eosio::token, transfer)( token_account, {buyer,active_permission},
+        { buyer, hdd_account, quant, std::string("buy hdd") } );
 
     int64_t bytes_out;
 
@@ -302,18 +319,22 @@ void hdddata::buyhdd(name buyer, name receiver, asset quant) {
     eosio_assert( bytes_out > 0, "must reserve a positive amount" );
     hbalance_table            _hbalance(_self, _self.value);
     auto res_itr = _hbalance.find( receiver.value );
+    uint64_t tmp_t = current_time();
     if( res_itr ==  _hbalance.end() ) {
         res_itr = _hbalance.emplace( receiver, [&]( auto& res ) {
             res.owner                 = receiver;
             res.last_hdd_balance = bytes_out;
-            res.last_hdd_time      = current_time();
+            res.last_hdd_time      = tmp_t;
         });
     } else {
         _hbalance.modify( res_itr, receiver, [&]( auto& res ) {
             res.last_hdd_balance += bytes_out;
-            res.last_hdd_time        =  current_time();
+            res.last_hdd_time        =  tmp_t;
         });
     }
+    
+    //update the hddofficial 
+    update_hddofficial(_hbalance, bytes_out, 0, 0, 0, tmp_t);
 }
 
 //@abi action
@@ -333,16 +354,19 @@ void hdddata::sellhdd(name account, uint64_t quant){
         /// the cast to int64_t of quant is safe because we certify quant is <= quota which is limited by prior purchases
         tokens_out = es.convert( asset(quant, hdd_symbol), core_symbol());
     });
-    
+    uint64_t tmp_t = current_time();
     _hbalance.modify( res_itr, account, [&]( auto& res ) {
         res.last_hdd_balance -= quant;
-        res.last_hdd_time        =  current_time();
+        res.last_hdd_time        =  tmp_t;
     });
 
     INLINE_ACTION_SENDER(eosio::token, transfer)(
-    token_account, { {hdd_account, active_permission}, {account, active_permission} },
-    { hdd_account, account, asset(tokens_out), std::string("sell ram") }
+        token_account, { {hdd_account, active_permission}, {account, active_permission} },
+        { hdd_account, account, asset(tokens_out), std::string("sell ram") }
     );
+    
+    //update the hddofficial 
+    update_hddofficial(_hbalance, -quant, 0, 0, 0, tmp_t);
 }
 
 asset exchange_state::convert_to_exchange( connector& c, asset in ) {
