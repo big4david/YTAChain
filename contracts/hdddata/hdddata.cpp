@@ -254,13 +254,14 @@ void hdddata::newmaccount(name mname, name owner) {
     _maccount.emplace(mname, [&](auto &row) {
         row.ming_id = mname.value;
         row.owner = owner;
+        row.m_space = 0;
     });
 
     require_auth(owner);
     hbalance_table  _hbalance(_self, _self.value);
     auto hbalance_itr = _hbalance.find(owner.value);
     
-    eosio_assert( hbalance_itr == _hbalance.end(), "no owner exists  in _hbalance table" );
+    eosio_assert( hbalance_itr == _hbalance.end(), "owner already exist  in _hbalance table  \n" );
     
     _hbalance.emplace(owner, [&](auto &row) {
         //todo check the 1st time insert to modify
@@ -276,29 +277,28 @@ void hdddata::newmaccount(name mname, name owner) {
 //@abi action
 void hdddata::addmprofit(name mname, uint64_t space){
     require_auth(mname);
-    //maccount_table _maccount(_self, _self.value);
+    //todo IS BP
     auto maccount_itr = _maccount.find(mname.value);
-    eosio_assert( maccount_itr != _maccount.end(), "no owner exists  in _hbalance table" );
-
+    eosio_assert( maccount_itr != _maccount.end(), "no owner exists  in maccount_itr table" );
+    //space verification
+    eosio_assert(maccount_itr->get_mspace() + data_slice_size == space , "not correct verification");
+    _maccount.modify(maccount_itr, mname, [&](auto &row) {
+        row.m_space  += preprocure_space;
+    });
+    
     hbalance_table  _hbalance(_self, _self.value);
     auto owner_id = maccount_itr->get_owner();
     auto hbalance_itr = _hbalance.find(owner_id);
     
-    eosio_assert( hbalance_itr == _hbalance.end(), "no owner exists  in _hbalance table" );
-
-    //space verification    
-    eosio_assert(hbalance_itr->get_hdd_space()+ data_slice_size ==space , "not correct verification");
-    
+    eosio_assert( hbalance_itr != _hbalance.end(), "no owner exists  in _hbalance table" );
     _hbalance.modify(hbalance_itr, _self, [&](auto &row) {
         //todo check the 1st time insert
-        //row.owner = owner;
-        row.hdd_space += data_slice_size;
-         //每周期收益 += (预采购空间*数据分片大小/1GB）*（记账周期/ 1年）
+       //每周期收益 += (预采购空间*数据分片大小/1GB）*（记账周期/ 1年）
         row.hdd_per_cycle_profit += (preprocure_space*data_slice_size/one_gb);
     });
     
     //update the hddofficial
-    update_hddofficial(_hbalance, 0, 0, (preprocure_space*data_slice_size/one_gb), data_slice_size, 0);
+    update_hddofficial(_hbalance, 0, 0, (preprocure_space*data_slice_size/one_gb), 0, 0);
 }
 
 //@abi action

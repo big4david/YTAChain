@@ -107,7 +107,7 @@ private:
         uint64_t              hdd_per_cycle_fee=0;
         uint64_t              hdd_per_cycle_profit=0;
         uint64_t              hdd_space=0;
-		uint64_t              last_hdd_time = current_time();                 //microseconds from 1970
+        uint64_t              last_hdd_time = current_time();                 //microseconds from 1970
         uint64_t              primary_key() const { return owner.value; }
         uint64_t              get_last_hdd_balance() const { return last_hdd_balance; }
         uint64_t              get_hdd_per_cycle_fee() const { return hdd_per_cycle_fee; }
@@ -123,15 +123,18 @@ private:
     
     // ming account 
     TABLE maccount {
-        uint64_t ming_id;
-        name     owner;
-
+        uint64_t   ming_id;
+        name       owner;
+        uint64_t   m_space;
+        
         uint64_t primary_key() const { return ming_id; }
         uint64_t get_owner() const { return owner.value; }
+        uint64_t get_mspace() const { return m_space; }
     };
 
     typedef multi_index<"maccount"_n, maccount,
-    indexed_by<"byowner"_n, const_mem_fun<maccount, uint64_t, &maccount::get_owner>>>
+    indexed_by<"byowner"_n, const_mem_fun<maccount, uint64_t, &maccount::get_owner>>,
+    indexed_by<"byspace"_n, const_mem_fun<maccount, uint64_t, &maccount::get_mspace>>>
     maccount_table;
     
     TABLE producer {
