@@ -1,5 +1,5 @@
 {
-    "____comment": "This file was generated with eosio-abigen. DO NOT EDIT Fri Apr 26 04:29:40 2019",
+    "____comment": "This file was generated with eosio-abigen. DO NOT EDIT Sun Apr 28 04:25:51 2019",
     "version": "eosio::abi/1.1",
     "structs": [
         {
@@ -182,6 +182,28 @@
                 {
                     "name": "producer_key",
                     "type": "public_key"
+                },
+                {
+                    "name": "producer_inx",
+                    "type": "uint8"
+                }
+            ]
+        },
+        {
+            "name": "regproducer",
+            "base": "",
+            "fields": [
+                {
+                    "name": "bpowner",
+                    "type": "name"
+                },
+                {
+                    "name": "producer_key",
+                    "type": "public_key"
+                },
+                {
+                    "name": "producer_inx",
+                    "type": "uint8"
                 }
             ]
         },
@@ -281,6 +303,11 @@
         {
             "name": "newmaccount",
             "type": "newmaccount",
+            "ricardian_contract": ""
+        },
+        {
+            "name": "regproducer",
+            "type": "regproducer",
             "ricardian_contract": ""
         },
         {

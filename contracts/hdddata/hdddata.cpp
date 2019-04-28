@@ -1,5 +1,6 @@
 #include "hdddata.hpp"
 #include <eosiolib/eosio.hpp>
+#include <eosiolib/crypto.h>
 #include <eosiolib/print.hpp>
 #include <eosiolib/serialize.hpp>
 #include <eosiolib/multi_index.hpp>
@@ -116,7 +117,7 @@ void hdddata::gethbalance(name owner) {
 }
 
 void hdddata::update_hddofficial(hbalance_table& _hbalance, 
-    const int64_t _hb, const int64_t _fee, const int64_t _profit, const int64_t _space, const uint64_t _time) {
+const int64_t _hb, const int64_t _fee, const int64_t _profit, const int64_t _space, const uint64_t _time) {
     auto hbalance_itr = _hbalance.find(HDD_OFFICIAL.value);
     eosio_assert( hbalance_itr != _hbalance.end(), "no HDD_OFFICIAL exists  in  hbalance table" );
     _hbalance.modify(hbalance_itr, _self, [&](auto &row) {
@@ -144,7 +145,7 @@ void hdddata::gethsum() {
         print("gethbalance  modify  slot_t :  ", slot_t,  "\n");
         //todo  check overflow and time cycle 
         row.last_hdd_balance = hbalance_itr->get_last_hdd_balance() + 
-             slot_t * ( hbalance_itr->get_hdd_per_cycle_profit() - hbalance_itr->get_hdd_per_cycle_fee() ) * seconds_in_one_day;
+        slot_t * ( hbalance_itr->get_hdd_per_cycle_profit() - hbalance_itr->get_hdd_per_cycle_fee() ) * seconds_in_one_day;
         
         print("B   gethbalance   .last_hdd_balance :  ", row.last_hdd_balance,  "\n");
         row.last_hdd_time = tmp_t;
@@ -160,9 +161,9 @@ void hdddata::sethfee(name owner, uint64_t fee) {
     
     eosio_assert( hbalance_itr != _hbalance.end(), "no owner exists  in _hbalance table  \n" );
     eosio_assert(fee != hbalance_itr->get_hdd_per_cycle_fee(), " the fee is the same \n");
-    //Ã¿ÖÜÆÚ·ÑÓÃ <= £¨Õ¼ÓÃ´æ´¢¿Õ¼ä*Êý¾Ý·ÖÆ¬´óÐ¡/1GB£©*£¨¼ÇÕËÖÜÆÚ/ 1Äê£©
+    //æ¯å‘¨æœŸè´¹ç”¨ <= ï¼ˆå ç”¨å­˜å‚¨ç©ºé—´*æ•°æ®åˆ†ç‰‡å¤§å°/1GBï¼‰*ï¼ˆè®°è´¦å‘¨æœŸ/ 1å¹´ï¼‰
     bool istrue = hbalance_itr->get_hdd_per_cycle_fee() <= 
-        (hbalance_itr->get_hdd_space()) * data_slice_size/one_gb *seconds_in_one_day/seconds_in_one_year;
+    (hbalance_itr->get_hdd_space()) * data_slice_size/one_gb *seconds_in_one_day/seconds_in_one_year;
     eosio_assert(istrue , "the fee verification is not  right \n");
     
 
@@ -179,8 +180,8 @@ void hdddata::sethfee(name owner, uint64_t fee) {
         print("gethbalance  modify  slot_t :  ", slot_t,  "\n");
         //todo  check overflow and time cycle 
         row.last_hdd_balance = tmp_balance + 
-             slot_t * ( hbalance_itr->get_hdd_per_cycle_profit() - fee ) * seconds_in_one_day;
-         
+        slot_t * ( hbalance_itr->get_hdd_per_cycle_profit() - fee ) * seconds_in_one_day;
+        
         row.last_hdd_time = tmp_t;
         
         delta_balance = row.last_hdd_balance - tmp_balance;
@@ -242,7 +243,7 @@ void hdddata::subhspace(name owner, name hddaccount, uint64_t space){
         row.hdd_space -=space;
     });
 
-     //update hddofficial balance todo
+    //update hddofficial balance todo
 }
 
 //@abi action
@@ -293,7 +294,7 @@ void hdddata::addmprofit(name mname, uint64_t space){
     eosio_assert( hbalance_itr != _hbalance.end(), "no owner exists  in _hbalance table" );
     _hbalance.modify(hbalance_itr, _self, [&](auto &row) {
         //todo check the 1st time insert
-       //Ã¿ÖÜÆÚÊÕÒæ += (Ô¤²É¹º¿Õ¼ä*Êý¾Ý·ÖÆ¬´óÐ¡/1GB£©*£¨¼ÇÕËÖÜÆÚ/ 1Äê£©
+        //æ¯å‘¨æœŸæ”¶ç›Š += (é¢„é‡‡è´­ç©ºé—´*æ•°æ®åˆ†ç‰‡å¤§å°/1GBï¼‰*ï¼ˆè®°è´¦å‘¨æœŸ/ 1å¹´ï¼‰
         row.hdd_per_cycle_profit += (preprocure_space*data_slice_size/one_gb);
     });
     
@@ -307,7 +308,7 @@ void hdddata::buyhdd(name buyer, name receiver, asset quant) {
     eosio_assert( quant.amount > 0, "must purchase a positive amount" );
 
     INLINE_ACTION_SENDER( eosio::token, transfer)( token_account, {buyer,active_permission},
-        { buyer, hdd_account, quant, std::string("buy hdd") } );
+    { buyer, hdd_account, quant, std::string("buy hdd") } );
 
     int64_t bytes_out;
 
@@ -361,12 +362,38 @@ void hdddata::sellhdd(name account, uint64_t quant){
     });
 
     INLINE_ACTION_SENDER(eosio::token, transfer)(
-        token_account, { {hdd_account, active_permission}, {account, active_permission} },
-        { hdd_account, account, asset(tokens_out), std::string("sell ram") }
+    token_account, { {hdd_account, active_permission}, {account, active_permission} },
+    { hdd_account, account, asset(tokens_out), std::string("sell ram") }
     );
     
     //update the hddofficial 
     update_hddofficial(_hbalance, -quant, 0, 0, 0, tmp_t);
+}
+
+//@abi action
+void hdddata::regproducer(const name bpowner, const public_key& producer_key, const uint8_t producer_inx) {
+    require_auth( bpowner );
+    auto prod_itr = _producer.find( bpowner.value);
+
+    if ( prod_itr != _producer.end() ) {
+        _producer.modify( prod_itr, bpowner, [&]( auto& row ){
+            row.producer_key      = producer_key;
+            row.producer_inx       = producer_inx;
+        });
+    } else {
+         _producer.emplace( bpowner, [&]( auto& row ){
+            row.owner                  = bpowner;
+            row.producer_key      = producer_key;
+            row.producer_inx       = producer_inx;
+         });
+      }
+}
+
+uint8_t hdddata::get_producer_idx( const name owner) {
+    require_auth( owner );
+    auto prod_itr = _producer.find( owner.value);
+    eosio_assert( prod_itr != _producer.end(), "no such producer row" );
+    return prod_itr->producer_inx;
 }
 
 asset exchange_state::convert_to_exchange( connector& c, asset in ) {

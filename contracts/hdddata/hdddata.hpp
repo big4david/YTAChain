@@ -76,6 +76,8 @@ public:
 
     ACTION subhspace(name owner, name hddaccount, uint64_t space);
 
+    ACTION regproducer(const name bpowner, const public_key& producer_key, const uint8_t producer_inx);
+
     static constexpr symbol hddcore_symbol = symbol(symbol_code("HDDCORE"), 4);
     static constexpr symbol hdd_symbol     = symbol(symbol_code("HDD"), 0);
     static constexpr symbol yta_symbol     = symbol(symbol_code("YTA"), 4);
@@ -138,10 +140,11 @@ private:
     maccount_table;
     
     TABLE producer {
-        name                       owner;
-        eosio::public_key      producer_key;
-        
+        name                          owner;
+        eosio::public_key       producer_key;
+        uint8_t                        producer_inx;
         uint64_t primary_key() const { return owner.value;   }
+        //uint8_t   get_bp_idx() const { return producer_inx; }
     };
     
     typedef multi_index<"producer"_n, producer> producer_table;
@@ -151,6 +154,7 @@ private:
         const int64_t _hb=0, const int64_t _fee=0, const int64_t _profit=0, 
         const int64_t _space=0, const uint64_t _time=0 );
     
+    uint8_t get_producer_idx( const name owner) ;
     
     //hbalance_table                                   _hbalance;
     maccount_table                                 _maccount;
